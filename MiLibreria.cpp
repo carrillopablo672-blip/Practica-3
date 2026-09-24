@@ -1,5 +1,6 @@
 #include "headers.h"
 #include <stdexcept>
+#include <iostream>
 
 using namespace std;
 
@@ -70,4 +71,255 @@ string descomprimirRLE(const string& comprimido)
 bool verificarRLE(const string& original, const string& recuperado)
 {
     return original == recuperado;
+}
+
+//--------------------------------------------------------
+
+namespace {
+
+// Busca en el diccionario la entrada (prefijo, caracter).
+// Retorna su indice o -1 si no existe. La entrada 0 es la frase vacia.
+int buscarEntrada(const ParLZ78* diccionario, int tamano, int prefijo, char caracter)
+{
+    for (int j = 1; j < tamano; j++) {
+        if (diccionario[j].indice == prefijo && diccionario[j].caracter == caracter) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+// Duplica la capacidad del diccionario: reserva un arreglo nuevo,
+// copia las entradas y libera el anterior.
+void ampliarDiccionario(ParLZ78*& diccionario, int& capacidad, int tamano)
+{
+    const int nuevaCapacidad = capacidad * 2;
+    ParLZ78* nuevo = new ParLZ78[nuevaCapacidad];
+
+    for (int j = 0; j < tamano; j++) {
+        nuevo[j] = diccionario[j];
+    }
+
+    delete[] diccionario;
+    diccionario = nuevo;
+    capacidad = nuevaCapacidad;
+}
+
+// Imprime la frase de la entrada 'indice' siguiendo la cadena de prefijos.
+void imprimirFrase(const ParLZ78* pares, int indice)
+{
+    if (indice == 0) {
+        return;                                     // frase vacia
+    }
+    imprimirFrase(pares, pares[indice - 1].indice); // primero el prefijo
+    cout << pares[indice - 1].caracter;             // luego el caracter
+}
+
+} // namespace
+
+char* leerLinea(int& longitud)
+{
+    int capacidad = 16;
+    char* texto = new char[capacidad];
+    longitud = 0;
+    char c;
+
+    while (cin.get(c) && c != '\n') {
+        if (longitud + 1 >= capacidad) {            // +1 para el '\0' final
+            char* nuevo = nullptr;
+            try {
+                nuevo = new char[capacidad * 2];
+            } catch (...) {
+                delete[] texto;
+                throw;
+            }
+            for (int j = 0; j < longitud; j++) {
+                nuevo[j] = texto[j];
+            }
+            delete[] texto;
+            texto = nuevo;
+            capacidad *= 2;
+        }
+        texto[longitud++] = c;
+    }
+
+    if (longitud > 0 && texto[longitud - 1] == '\r') { // fin de linea de Windows
+        longitud--;
+    }
+    texto[longitud] = '\0';
+    return texto;
+}
+
+ParLZ78* comprimirLZ78(const char* texto, int longitud, int& cantidadPares)
+{
+    if (texto == nullptr || longitud < 0) {
+        throw invalid_argument("Texto invalido para comprimir con LZ78.");
+    }
+
+    // El diccionario crece durante la compresion (no se sabe cuantas frases habra).
+    int capacidad = 16;
+    int tamano = 1;
+    ParLZ78* diccionario = new ParLZ78[capacidad];
+    diccionario[0].indice = 0;                  // entrada 0: frase vacia
+    diccionario[0].caracter = '\0';
+
+    // Nunca hay mas pares que caracteres, asi que ese es el tamano maximo de la salida.
+    ParLZ78* pares = nullptr;
+    try {
+        pares = new ParLZ78[longitud > 0 ? longitud : 1];
+    } catch (...) {
+        delete[] diccionario;
+        throw;
+    }
+
+    cantidadPares = 0;
+    int i = 0;
+
+    try {
+        while (i < longitud) {
+            // Buscar la frase mas larga del diccionario que empieza en la posicion i
+            int actual = 0;
+            int siguiente = 0;
+            while (i < longitud &&
+                   (siguiente = buscarEntrada(diccionario, tamano, actual, texto[i])) != -1) {
+                actual = siguiente;
+                i++;
+            }
+
+            if (i < longitud) {
+                // Emitir (actual, texto[i]) y agregar la nueva frase al diccionario
+                if (tamano == capacidad) {
+                    ampliarDiccionario(diccionario, capacidad, tamano);
+                }
+                diccionario[tamano].indice = actual;
+                diccionario[tamano].caracter = texto[i];
+                tamano++;
+
+                pares[cantidadPares].indice = actual;
+                pares[cantidadPares].caracter = texto[i];
+                cantidadPares++;
+                i++;
+            } else {
+                // El texto termino en una frase que ya existe: solo se emite su indice
+                pares[cantidadPares].indice = actual;
+                pares[cantidadPares].caracter = '\0';
+                cantidadPares++;
+            }
+        }
+    } catch (...) {
+        delete[] diccionario;
+        delete[] pares;
+        throw;
+    }
+
+    delete[] diccionario;
+    return pares;
+}
+
+char* descomprimirLZ78(const ParLZ78* pares, int cantidadPares, int& longitud)
+{
+    if (cantidadPares < 0 || (pares == nullptr && cantidadPares > 0)) {
+        throw invalid_argument("Pares invalidos para descomprimir con LZ78.");
+    }
+
+    // Validar antes de reservar memoria: el par k solo puede referirse
+    // a entradas que ya existen (0..k), y solo el ultimo puede ir sin caracter.
+    for (int k = 0; k < cantidadPares; k++) {
+        if (pares[k].indice < 0 || pares[k].indice > k) {
+            throw invalid_argument("Par " + to_string(k + 1) + " invalido: el indice " +
+                                   to_string(pares[k].indice) + " no existe en el diccionario.");
+        }
+        if (pares[k].caracter == '\0' && k != cantidadPares - 1) {
+            throw invalid_argument("Par " + to_string(k + 1) +
+                                   " invalido: solo el ultimo par puede ir sin caracter.");
+        }
+    }
+
+    ParLZ78* diccionario = nullptr;
+    int* largo = nullptr;       // largo[j] = longitud de la frase j
+    char* texto = nullptr;
+
+    try {
+        // Reconstruir el diccionario: la entrada k+1 es el par k
+        diccionario = new ParLZ78[cantidadPares + 1];
+        largo = new int[cantidadPares + 1];
+        diccionario[0].indice = 0;
+        diccionario[0].caracter = '\0';
+        largo[0] = 0;
+
+        longitud = 0;
+        for (int k = 0; k < cantidadPares; k++) {
+            diccionario[k + 1] = pares[k];
+            const bool sinCaracter = (pares[k].caracter == '\0');
+            largo[k + 1] = largo[pares[k].indice] + (sinCaracter ? 0 : 1);
+            longitud += largo[k + 1];
+        }
+
+        texto = new char[longitud + 1];
+    } catch (...) {
+        delete[] diccionario;
+        delete[] largo;
+        throw;
+    }
+
+    // Escribir cada frase: se recorre la cadena de prefijos desde el final
+    // de la frase hacia el inicio, llenando el texto de derecha a izquierda.
+    int posicion = 0;
+    for (int k = 0; k < cantidadPares; k++) {
+        int entrada = (pares[k].caracter == '\0') ? pares[k].indice : k + 1;
+        int p = posicion + largo[k + 1] - 1;
+
+        while (entrada != 0) {
+            texto[p] = diccionario[entrada].caracter;
+            p--;
+            entrada = diccionario[entrada].indice;
+        }
+        posicion += largo[k + 1];
+    }
+    texto[longitud] = '\0';
+
+    delete[] diccionario;
+    delete[] largo;
+    return texto;
+}
+
+bool verificarLZ78(const char* original, int longitudOriginal,
+                   const char* recuperado, int longitudRecuperado)
+{
+    if (longitudOriginal != longitudRecuperado) {
+        return false;
+    }
+    for (int i = 0; i < longitudOriginal; i++) {
+        if (original[i] != recuperado[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void imprimirParesLZ78(const ParLZ78* pares, int cantidadPares)
+{
+    for (int k = 0; k < cantidadPares; k++) {
+        if (pares[k].caracter == '\0') {
+            cout << "(" << pares[k].indice << ")";
+        } else {
+            cout << "(" << pares[k].indice << ", " << pares[k].caracter << ")";
+        }
+        if (k < cantidadPares - 1) {
+            cout << ", ";
+        }
+    }
+    cout << endl;
+}
+
+void imprimirDiccionarioLZ78(const ParLZ78* pares, int cantidadPares)
+{
+    for (int k = 0; k < cantidadPares; k++) {
+        if (pares[k].caracter == '\0') {
+            continue;                               // el par final no crea entrada nueva
+        }
+        cout << k + 1 << " -> ";
+        imprimirFrase(pares, k + 1);
+        cout << endl;
+    }
 }

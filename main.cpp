@@ -6,6 +6,8 @@
 
 using namespace std;
 
+using namespace std;
+
 int main(){
 
     int ejercicio;
@@ -63,7 +65,64 @@ int main(){
 
         case 2:{
 
-            cout << "LZ78: en construccion." << endl;
+            char *original = nullptr;
+            ParLZ78 *pares = nullptr;
+            char *recuperado = nullptr;
+
+            int longitudOriginal = 0;
+            int cantidadPares = 0;
+            int longitudRecuperado = 0;
+
+            cout << "Ingrese una cadena de caracteres: ";
+
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');   // quita el Enter que deja cin >>
+
+            try {
+
+                original = leerLinea(longitudOriginal);
+
+                pares = comprimirLZ78(original, longitudOriginal, cantidadPares);
+
+                recuperado = descomprimirLZ78(pares, cantidadPares, longitudRecuperado);
+
+                cout << "Original: " << original << endl;
+
+                cout << "Pares generados (" << cantidadPares << "): ";
+
+                imprimirParesLZ78(pares, cantidadPares);
+
+                cout << "Diccionario:" << endl;
+
+                imprimirDiccionarioLZ78(pares, cantidadPares);
+
+                cout << "Recuperado: " << recuperado << endl;
+
+                if (verificarLZ78(original, longitudOriginal, recuperado, longitudRecuperado)){
+
+                    cout << "La descompresion SI coincide con el texto original." << endl;
+
+                }
+                else{
+
+                    cout << "La descompresion NO coincide con el texto original." << endl;
+
+                }
+
+            }
+            catch (const invalid_argument &error){
+
+                cout << "Error: " << error.what() << endl;
+
+            }
+            catch (const bad_alloc &){
+
+                cout << "Error: no hay memoria suficiente." << endl;
+
+            }
+
+            delete[] original;      // se libera siempre, haya o no excepcion
+            delete[] pares;
+            delete[] recuperado;
 
             break;
         }
