@@ -2,10 +2,11 @@
 #include <stdexcept>
 #include <iostream>
 #include <iomanip>
+#include <limits>
+#include <fstream>
 
 using namespace std;
 
-namespace {
 
 const string::size_type MAX_REPETICIONES = 9;
 
@@ -14,7 +15,7 @@ bool esDigito(char c)
     return c >= '0' && c <= '9';
 }
 
-} // namespace
+
 
 string comprimirRLE(const string& texto)
 {
@@ -381,7 +382,6 @@ void imprimirDiccionarioLZ78(const ParLZ78* pares, int cantidadPares)
 
 //-------------------------------------------------------------
 
-namespace {
 
 void validarParametros(const unsigned char* datos, int longitud, int n)
 {
@@ -395,11 +395,10 @@ void validarParametros(const unsigned char* datos, int longitud, int n)
     }
 }
 
-} // namespace
 
 unsigned char rotarIzquierda(unsigned char byte, int n)
 {
-    // Los n bits de la izquierda que se pierden con << reaparecen a la derecha con >>
+    // Los n bits de la izquierda que se pierden con (reaparecen a la derecha con)
     return static_cast<unsigned char>((byte << n) | (byte >> (8 - n)));
 }
 
@@ -416,7 +415,7 @@ unsigned char* encriptar(const unsigned char* datos, int longitud, int n, unsign
 
     for (int i = 0; i < longitud; i++) {
 
-        resultado[i] = rotarIzquierda(datos[i], n) ^ clave;     // 1. rotar, 2. XOR
+        resultado[i] = rotarIzquierda(datos[i], n) ^ clave;
     }
     return resultado;
 }
@@ -447,17 +446,6 @@ bool verificarBytes(const unsigned char* original, const unsigned char* recupera
     return true;
 }
 
-void imprimirHex(const unsigned char* datos, int longitud)
-{
-    for (int i = 0; i < longitud; i++) {
-
-        cout << uppercase << hex << setw(2) << setfill('0')
-
-        << static_cast<int>(datos[i]) << " ";
-
-    }
-    cout << dec << setfill(' ') << endl;    // se restaura el formato decimal
-}
 
 void imprimirBinario(unsigned char byte)
 {
@@ -465,3 +453,87 @@ void imprimirBinario(unsigned char byte)
         cout << ((byte >> bit) & 1);
     }
 }
+
+//--------------------------------------------------------------------------------------------------
+
+//Ejercicio 4
+
+char* leerArchivo(const char* nombre, int& longitud)
+{
+    if (nombre == nullptr) {
+        throw invalid_argument("Nombre de archivo invalido.");
+    }
+
+    // Modo binario: el archivo se lee tal cual, byte por byte, sin convertir
+    // los saltos de linea. Asi la comparacion final es exacta.
+    ifstream archivo(nombre, ios::in | ios::binary);
+    if (!archivo.is_open()) {
+        throw runtime_error(string("No se pudo abrir el archivo \"") + nombre + "\".");
+    }
+
+    // Se mide el archivo para reservar exactamente la memoria necesaria
+    archivo.seekg(0, ios::end);
+    const streamoff tamano = archivo.tellg();
+    if (tamano < 0) {
+        throw runtime_error("No se pudo determinar el tamano del archivo.");
+    }
+    if (tamano >= numeric_limits<int>::max()) {
+        throw runtime_error("El archivo es demasiado grande.");
+    }
+    archivo.seekg(0, ios::beg);
+
+    longitud = static_cast<int>(tamano);
+    char* datos = new char[longitud + 1];
+
+    archivo.read(datos, longitud);
+    if (!archivo) {
+        delete[] datos;
+        throw runtime_error(string("Error al leer el archivo \"") + nombre + "\".");
+    }
+
+    datos[longitud] = '\0';
+    return datos;
+}
+
+void escribirArchivo(const char* nombre, const char* datos, int longitud)
+{
+    if (nombre == nullptr || longitud < 0 || (datos == nullptr && longitud > 0)) {
+        throw invalid_argument("Parametros invalidos para escribir el archivo.");
+    }
+
+    ofstream archivo(nombre, ios::out | ios::binary | ios::trunc);
+    if (!archivo.is_open()) {
+        throw runtime_error(string("No se pudo crear el archivo \"") + nombre + "\".");
+    }
+
+    archivo.write(datos, longitud);
+    if (!archivo) {
+        throw runtime_error(string("Error al escribir el archivo \"") + nombre + "\".");
+    }
+}
+
+void leerParametrosEncriptacion(int& n, unsigned char& clave)
+{
+    cout << "Ingrese el numero de bits a rotar n (0 < n < 8): ";
+    if (!(cin >> n)) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        throw invalid_argument("n debe ser un numero entero.");
+    }
+    if (n <= 0 || n >= 8) {
+        throw invalid_argument("El valor de n debe cumplir 0 < n < 8.");
+    }
+
+    int valor = 0;
+    cout << "Ingrese la clave K (0 a 255): ";
+    if (!(cin >> valor)) {
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        throw invalid_argument("K debe ser un numero entero.");
+    }
+    if (valor < 0 || valor > 255) {
+        throw invalid_argument("La clave K debe ser un byte (0 a 255).");
+    }
+    clave = static_cast<unsigned char>(valor);
+}
+

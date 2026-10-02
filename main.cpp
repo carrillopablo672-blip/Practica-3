@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <limits>
 #include "headers.h"
+#include <iomanip>
 
 using namespace std;
 
@@ -187,14 +188,6 @@ int main(){
 
                 desencriptado = desencriptar(encriptado, longitud, n, K);
 
-                cout << "Original (hex):      ";
-                imprimirHex(datos, longitud);
-
-                cout << "Encriptado (hex):    ";
-                imprimirHex(encriptado, longitud);
-
-                cout << "Desencriptado (hex): ";
-                imprimirHex(desencriptado, longitud);
 
                 if (longitud > 0){
 
@@ -229,12 +222,12 @@ int main(){
 
                 if (verificarBytes(datos, desencriptado, longitud)){
 
-                    cout << "La desencriptacion SI coincide con el texto original." << endl;
+                    cout << "La desencriptacion si coincide con el texto original." << endl;
 
                 }
                 else{
 
-                    cout << "La desencriptacion NO coincide con el texto original." << endl;
+                    cout << "La desencriptacion no coincide con el texto original." << endl;
 
                 }
 
@@ -253,6 +246,146 @@ int main(){
             delete[] texto;         // se libera siempre, haya o no excepcion
             delete[] encriptado;
             delete[] desencriptado;
+
+            break;
+        }
+
+        case 4:{
+
+            char *nombreArchivo = nullptr;
+            char *original = nullptr;
+            unsigned char *encriptado = nullptr;
+            unsigned char *desencriptado = nullptr;
+            char *textoFinal = nullptr;
+
+            int longitudNombre = 0;
+            int longitudOriginal = 0;
+            int longitudComprimido = 0;
+            int longitudFinal = 0;
+            int n = 0;
+            unsigned char K = 0;
+
+            int origen = 0;
+
+            try {
+
+
+                cout << "De donde quiere tomar el texto?" << endl;
+
+                cout << "  1. Escribirlo por teclado" << endl;
+
+                cout << "  2. Leerlo desde un archivo .txt" << endl;
+
+                cout << "Opcion: ";
+
+                if (!(cin >> origen)){
+
+                    cin.clear();
+                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                    throw invalid_argument("La opcion debe ser 1 o 2.");
+
+                }
+
+                cin.ignore(numeric_limits<streamsize>::max(), '\n');   // quita el Enter que deja cin >>
+
+                switch (origen){
+
+                case 1:{
+
+                    cout << "Ingrese el texto: ";
+
+                    original = leerLinea(longitudOriginal);
+
+                    break;
+                }
+
+                case 2:{
+
+                    cout << "Ingrese el nombre del archivo (es : entrada.txt jeje): ";
+
+                    nombreArchivo = leerLinea(longitudNombre);
+
+                    original = leerArchivo(nombreArchivo, longitudOriginal);
+
+                    cout << "Se leyeron " << longitudOriginal << " caracteres de " << nombreArchivo << "." << endl;
+
+                    break;
+                }
+
+                default:
+
+                    throw invalid_argument("La opcion debe ser 1 o 2.");
+                }
+
+                leerParametrosEncriptacion(n, K);
+
+                // 2. Comprimir con RLE
+                string comprimido = comprimirRLE(string(original, longitudOriginal));
+
+                longitudComprimido = static_cast<int>(comprimido.length());
+
+                // 3. Encriptar el resultado comprimido y guardarlo en un archivo
+                encriptado = encriptar(reinterpret_cast<const unsigned char*>(comprimido.data()), longitudComprimido, n, K);
+
+                escribirArchivo("encriptado.bin", reinterpret_cast<const char*>(encriptado), longitudComprimido);
+
+                // 4. Desencriptar
+                desencriptado = desencriptar(encriptado, longitudComprimido, n, K);
+
+                // 5. Descomprimir
+                string recuperado = descomprimirRLE(string(reinterpret_cast<const char*>(desencriptado), longitudComprimido));
+
+                // 6. Imprimir el texto final en un archivo
+                escribirArchivo("salida.txt", recuperado.data(), static_cast<int>(recuperado.length()));
+
+                // 7. Leer de nuevo el archivo de salida para verificar lo que realmente quedo escrito
+                textoFinal = leerArchivo("salida.txt", longitudFinal);
+
+                cout << endl << "Tamano original:     " << longitudOriginal << " bytes" << endl;
+
+                cout << "El texto original es: " << original;
+
+                cout << "El cmprimido es: " <<comprimido;
+
+                cout << "Tamano comprimido:   " << longitudComprimido << " bytes" << endl;
+
+
+
+
+                if (longitudOriginal == longitudFinal &&
+                    verificarBytes(reinterpret_cast<const unsigned char*>(original), reinterpret_cast<const unsigned char*>(textoFinal), longitudOriginal)){
+
+                    cout << "El texto de salida.txt si coincide con el original." << endl;
+
+                }
+                else{
+
+                    cout << "El texto de salida.txt no coincide con el original." << endl;
+
+                }
+
+            }
+            catch (const invalid_argument &error){
+
+                cout << "Error: " << error.what() << endl;
+
+            }
+            catch (const runtime_error &error){
+
+                cout << "Error: " << error.what() << endl;
+
+            }
+            catch (const bad_alloc &){
+
+                cout << "Error: no hay memoria suficiente." << endl;
+
+            }
+
+            delete[] nombreArchivo;     // se libera siempre, haya o no excepcion
+            delete[] original;
+            delete[] encriptado;
+            delete[] desencriptado;
+            delete[] textoFinal;
 
             break;
         }
